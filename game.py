@@ -70,8 +70,8 @@ if st.session_state.phase == 'setup':
             height=120, placeholder="Alice\nBob\nCharlie"
         )
     with cols[1]:
-        st.image("https://via.placeholder.com/150", width=150)
-        st.markdown("> Ready to play?")
+        st.markdown("<h1 style='text-align:center; font-size:70px;'>🕵️‍♂️</h1>", unsafe_allow_html=True)
+        st.markdown("### Ready to play?")
 
     if st.button("🚀 Distribute Roles"):
         # Parse inputs
