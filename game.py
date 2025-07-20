@@ -103,7 +103,7 @@ elif st.session_state.phase == 'night':
 
         st.title("🌙 Night Results 🌙")
         if target == save:
-            st.success(f"{target} was attacked but saved by the doctor!")
+            st.success(f"No player was killed")
         else:
             st.error(f"{target} was killed by the mafia.")
             if target in st.session_state.alive:
