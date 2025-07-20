@@ -1,7 +1,7 @@
 import streamlit as st
 import random
 
-# --- Safe Initialization ---
+# --- Initialization ---
 if 'phase' not in st.session_state:
     st.session_state.phase = 'setup'
 if 'players' not in st.session_state:
@@ -43,21 +43,20 @@ if st.session_state.phase == 'setup':
         else:
             random.shuffle(roles_list)
             st.session_state.players = players
-            st.session_state.alive = players.copy()
-            st.session_state.roles = dict(zip(players, roles_list))
-            st.session_state.phase = 'reveal'
+            st.session_state.alive   = players.copy()
+            st.session_state.roles   = dict(zip(players, roles_list))
+            st.session_state.phase   = 'reveal'
             st.session_state.current = 0
-            # move on
             st.rerun()
 
-# --- Reveal Phase (Secret Role Reveal) ---
+# --- Reveal Phase ---
 elif st.session_state.phase == 'reveal':
     players = st.session_state.players
-    roles = st.session_state.roles
-    idx = st.session_state.current
+    roles   = st.session_state.roles
+    idx     = st.session_state.current
 
     if idx >= len(players):
-        st.session_state.phase = 'night'
+        st.session_state.phase   = 'night'
         st.session_state.current = 0
         st.rerun()
     else:
@@ -73,121 +72,111 @@ elif st.session_state.phase == 'reveal':
 elif st.session_state.phase == 'night':
     alive = st.session_state.alive
     roles = st.session_state.roles
-    idx = st.session_state.current
+    idx   = st.session_state.current
 
-    # Initialize per-player night flags
-    if 'revealed' not in st.session_state:
-        st.session_state.revealed = {}
-    if 'action_done' not in st.session_state:
-        st.session_state.action_done = {}
-    if 'action_result' not in st.session_state:
-        st.session_state.action_result = {}
+    # Initialize turn state tracking
+    if 'revealed'      not in st.session_state: st.session_state.revealed      = {}
+    if 'action_done'   not in st.session_state: st.session_state.action_done   = {}
+    if 'action_result' not in st.session_state: st.session_state.action_result = {}
 
-    # 1) Win conditions
-    mafia_alive = sum(1 for p in alive if roles[p] == 'mafia')
-    num_alive = len(alive)
+    # --- Win Conditions ---
+    mafia_alive = sum(1 for p in alive if 'maf' in roles[p].lower())
+    num_alive   = len(alive)
     if mafia_alive == 0:
         st.balloons()
         st.success("All mafia are dead. Citizens win! 🎉")
-        if st.button("Restart"):
+        if st.button("Restart Game"):
             st.session_state.clear()
             st.rerun()
         st.stop()
     if mafia_alive >= num_alive - mafia_alive:
         st.error("Mafia have taken over. Mafia win! 🏴")
-        if st.button("Restart"):
+        if st.button("Restart Game"):
             st.session_state.clear()
             st.rerun()
         st.stop()
 
-    # 2) After all have acted: resolve night, remove victim, loop
+    # --- Process Results after all acted ---
     if idx >= len(alive):
         target = st.session_state.night_actions.get('mafia')
         save   = st.session_state.night_actions.get('doctor')
+
         st.title("🌙 Night Results 🌙")
         if target == save:
             st.success(f"{target} was attacked but saved by the doctor!")
         else:
             st.error(f"{target} was killed by the mafia.")
-            alive.remove(target)
+            if target in st.session_state.alive:
+                st.session_state.alive.remove(target)
+            else:
+                st.warning(f"(Debug) Tried to remove {target}, but they were already removed.")
+
         if st.button("Next Round"):
-            # reset for next cycle
-            st.session_state.current = 0
+            st.session_state.current       = 0
             st.session_state.night_actions.clear()
             st.session_state.revealed.clear()
             st.session_state.action_done.clear()
             st.session_state.action_result.clear()
             st.rerun()
+
+    # --- Per-Player Turn Logic ---
     else:
-        # 3) Per-player private turn
         player = alive[idx]
-        role   = roles[player]
+        role   = roles[player].lower()
         st.title(f"{player}, hold the phone")
 
-        # Reveal step
         if not st.session_state.revealed.get(player, False):
             if st.button("Reveal your role"):
                 st.session_state.revealed[player] = True
                 st.rerun()
         else:
-            st.info(f"**You are: {role}**")
+            st.info(f"**You are: {roles[player]}**")
 
-            # Action step
             if not st.session_state.action_done.get(player, False):
-                # Mafia kill
-                if role == 'mafia':
+                if 'maf' in role:
                     choice = st.selectbox("Choose someone to kill:", [p for p in alive if p != player])
                     if st.button("Confirm Kill"):
                         st.session_state.night_actions['mafia'] = choice
-                        st.session_state.action_result[player] = f"You chose to kill {choice}."
-                        st.session_state.action_done[player] = True
+                        st.session_state.action_result[player]  = f"You chose to kill {choice}."
+                        st.session_state.action_done[player]    = True
                         st.rerun()
 
-                # Police investigate
-                elif role == 'police':
+                elif 'polic' in role:
                     suspect = st.selectbox("Choose someone to investigate:", [p for p in alive if p != player])
                     if st.button("Confirm Investigation"):
-                        is_m = roles[suspect] == 'mafia'
-                        res = f"{suspect} is {'Mafia' if is_m else 'Not Mafia'}!"
-                        st.session_state.action_result[player] = res
-                        st.session_state.action_done[player] = True
+                        is_mafia = 'maf' in roles[suspect].lower()
+                        st.session_state.action_result[player] = f"{suspect} is {'Mafia' if is_mafia else 'Not Mafia'}."
+                        st.session_state.action_done[player]   = True
                         st.rerun()
 
-                # Doctor save
-                elif role == 'doctor':
+                elif 'doc' in role:
                     save = st.selectbox("Choose someone to save:", alive)
                     if st.button("Confirm Save"):
                         st.session_state.night_actions['doctor'] = save
-                        st.session_state.action_result[player] = f"You chose to save {save}."
-                        st.session_state.action_done[player] = True
+                        st.session_state.action_result[player]   = f"You chose to save {save}."
+                        st.session_state.action_done[player]     = True
                         st.rerun()
 
-                # Likend guess police
-                elif role == 'likend':
+                elif 'likend' in role:
                     guess = st.selectbox("Guess who is the police:", [p for p in alive if p != player])
                     if st.button("Confirm Guess"):
-                        is_p = roles[guess] == 'police'
-                        res = f"{guess} is {'Police' if is_p else 'Not Police'}!"
-                        st.session_state.action_result[player] = res
-                        st.session_state.action_done[player] = True
+                        is_police = 'polic' in roles[guess].lower()
+                        st.session_state.action_result[player] = f"{guess} is {'Police' if is_police else 'Not Police'}."
+                        st.session_state.action_done[player]   = True
                         st.rerun()
 
-                # Citizen does nothing
                 else:
-                    st.info("You are a citizen. You do nothing.")
+                    st.info("You are a citizen. You do nothing at night.")
                     if st.button("End Turn"):
                         st.session_state.action_result[player] = "You did nothing."
-                        st.session_state.action_done[player] = True
+                        st.session_state.action_done[player]   = True
                         st.rerun()
 
-            # Result & Continue
             else:
                 st.write(st.session_state.action_result[player])
                 if st.button("Continue"):
-                    # advance turn
                     st.session_state.current += 1
-                    # reset flags for next player
-                    st.session_state.revealed[player] = False
-                    st.session_state.action_done[player] = False
+                    st.session_state.revealed[player]      = False
+                    st.session_state.action_done[player]   = False
                     st.session_state.action_result[player] = ""
                     st.rerun()
